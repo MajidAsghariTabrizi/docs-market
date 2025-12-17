@@ -1,0 +1,29 @@
+name: Auto Deploy Docs Market
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to server (safe)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 171.22.24.45
+          username: root
+          key: ${{ secrets.DOCS_MARKET_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/docs-market-repo
+            git pull origin main
+            rsync -av --delete \
+              --exclude='.git' \
+              --exclude='.github' \
+              ./ /var/www/docs-market/
+            chown -R www-data:www-data /var/www/docs-market
+            chmod -R 755 /var/www/docs-market

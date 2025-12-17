@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>بخش ۴ – سفارش‌ها، وب‌هوک و MQTT | راهنمای POS اسنپ! مارکت</title>
+  <link rel="stylesheet" href="../style.css" />
+  <style>
+    pre, code {
+      direction: ltr;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="container">
+    <nav class="breadcrumb">
+      <a href="../index.html">خانه</a> /
+      <a href="03-product.html">بخش ۳: محصولات و موجودی</a> /
+      <span>بخش ۴: سفارش‌ها</span>
+    </nav>
+    <h1>۴. سفارش‌ها، وب‌هوک و MQTT</h1>
+  </div>
+</header>
+
+<main class="container">
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۴.۱ مقدمه</h2>
+  <p>
+    فرآیند سفارش، حساس‌ترین نقطه‌ی اتصال بین POS فروشگاه و سامانه فروش آنلاین اسنپ! مارکت است.
+    هر اختلال در دریافت، تأیید یا پردازش سفارش می‌تواند مستقیماً به
+    <strong>NFC، تماس مرکز تماس یا نارضایتی مشتری</strong> منجر شود.
+  </p>
+  <p>
+    دریافت سفارش از دو مسیر انجام می‌شود:
+  </p>
+  <ul>
+    <li><strong>Webhook:</strong> مسیر اصلی و الزامی برای دریافت جزئیات کامل سفارش</li>
+    <li><strong>MQTT:</strong> اعلان بلادرنگ برای اطلاع از ایجاد یا تغییر وضعیت سفارش</li>
+  </ul>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۴.۲ دریافت سفارش از طریق Webhook (مسیر اصلی)</h2>
+
+  <p>
+    هنگام ثبت یا ویرایش سفارش، سامانه اسنپ! مارکت یک درخواست
+    <code>POST</code>
+    به آدرس Webhook معرفی‌شده توسط فروشگاه ارسال می‌کند.
+  </p>
+
+  <p>
+    بدنه درخواست از نوع
+    <code>application/x-www-form-urlencoded</code>
+    بوده و شامل تمام اطلاعات موردنیاز برای ثبت سفارش در POS است.
+  </p>
+
+  <h3>هدرهای مهم</h3>
+  <ul>
+    <li><code>Content-Type:</code> application/x-www-form-urlencoded</li>
+    <li><code>User-Agent:</code> شامل عبارت <code>Snapp</code></li>
+    <li><code>Authorization:</code> امضای HMAC</li>
+  </ul>
+
+  <div class="callout">
+    <strong>نکته امنیتی:</strong>
+    Webhook از Bearer Token استفاده نمی‌کند.
+    اعتبار درخواست فقط از طریق HMAC بررسی می‌شود.
+  </div>
+
+  <h3>نمونه درخواست واقعی (Production)</h3>
+  <div class="code-block dark">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://YOUR_WEBHOOK_URL
+Content-Type: application/x-www-form-urlencoded
+Authorization: HMAC snappfood:{timestamp}:{signature}
+
+code=xd4yd22w
+&statusCode=56
+&vendorCode=p5qole
+&orderDate=1765286349
+&price=115900
+&packingPrice=7900
+&deliveryTime=15
+&preparationTime=20
+&expeditionType=PICKUP
+&orderPaymentTypeCode=ONLINE
+&products[0][barcode]=6260415738200
+&products[0][quantity]=3
+&products[0][price]=36000
+&products[0][discount]=12000
+&products[0][title]=...
+</code></pre>
+  </div>
+
+  <h3>پاسخ مورد انتظار فروشگاه</h3>
+  <div class="code-block">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>HTTP/1.1 200 OK</code></pre>
+  </div>
+
+  <div class="callout danger">
+    <strong>هشدار:</strong>
+    در صورت عدم دریافت پاسخ HTTP معتبر،
+    سفارش مجدداً ارسال شده یا وارد فرآیند مرکز تماس می‌شود.
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۴.۳ دریافت اعلان از طریق MQTT</h2>
+
+  <p>
+    MQTT برای اعلان بلادرنگ استفاده می‌شود و
+    جایگزین Webhook نیست.
+  </p>
+
+  <div class="code-block">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>Topic:
+neuron/vendor/{vendorCode}</code></pre>
+  </div>
+
+  <p>
+    پس از دریافت پیام MQTT، فروشگاه باید منتظر Webhook بماند
+    و پردازش سفارش را فقط بر اساس Webhook انجام دهد.
+  </p>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۴.۴ پاسخ‌دهی به سفارش‌ها (API)</h2>
+
+  <h3>۴.۴.۱ تأیید دریافت سفارش (ACK)</h3>
+  <p>
+    اولین اقدام فروشگاه پس از دریافت Webhook،
+    ارسال ACK است.
+  </p>
+
+  <div class="code-block dark">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST /va/v1/order/{orderCode}/ack
+Authorization: Bearer &lt;access_token&gt;</code></pre>
+  </div>
+
+  <h3>۴.۴.۲ پذیرش سفارش (ACCEPT)</h3>
+  <div class="code-block dark">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST /va/v1/order/{orderCode}/accept
+Authorization: Bearer &lt;access_token&gt;
+
+{
+  "packingPrice": 7900,
+  "delta": 0,
+  "deliveryTime": 15,
+  "riderPickupTime": 10
+}</code></pre>
+  </div>
+
+  <h3>۴.۴.۳ رد سفارش (REJECT)</h3>
+  <div class="code-block dark">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST /va/v1/order/{orderCode}/reject
+Authorization: Bearer &lt;access_token&gt;
+
+{
+  "reason": "Out of stock"
+}</code></pre>
+  </div>
+
+  <div class="callout danger">
+    <strong>نکته حیاتی:</strong>
+    در صورت Reject به دلیل عدم موجودی،
+    فروشگاه باید بلافاصله موجودی کالا را اصلاح کند
+    تا از تکرار NFC جلوگیری شود.
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۴.۵ وضعیت‌های سفارش (StatusCode)</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>کد</th>
+        <th>معنی</th>
+        <th>اقدام مجاز فروشگاه</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>56</td><td>سفارش جدید / ویرایش شده</td><td>ACK</td></tr>
+      <tr><td>714</td><td>ارسال مجدد سفارش</td><td>ACK</td></tr>
+      <tr><td>61</td><td>ACK شده</td><td>ACCEPT / REJECT</td></tr>
+      <tr><td>713</td><td>PICK شده</td><td>—</td></tr>
+      <tr><td>42</td><td>پذیرفته شده</td><td>—</td></tr>
+      <tr><td>51</td><td>رد شده (Need Call)</td><td>—</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۴.۶ خطاهای رایج</h2>
+
+  <table>
+    <thead>
+      <tr><th>کد</th><th>شرح</th><th>اقدام پیشنهادی</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1023</td><td>سفارش یافت نشد</td><td>بررسی orderCode</td></tr>
+      <tr><td>1059</td><td>Accept تکراری</td><td>نادیده بگیرید</td></tr>
+      <tr><td>1060</td><td>Reject تکراری</td><td>نادیده بگیرید</td></tr>
+      <tr><td>1068</td><td>Pick تکراری</td><td>نادیده بگیرید</td></tr>
+      <tr><td>5xx</td><td>خطای موقت</td><td>Retry با Backoff</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۴.۷ نکات پایداری</h2>
+  <ul>
+    <li>Webhook تنها مرجع پردازش سفارش است</li>
+    <li>MQTT فقط اعلان است</li>
+    <li>ACK را با تأخیر ارسال نکنید</li>
+    <li>Retry فقط برای خطاهای موقتی</li>
+  </ul>
+</section>
+
+<section class="panel">
+  <h2>۴.۸ ادامه مسیر</h2>
+  <a href="05-process.html" class="btn-primary">
+    رفتن به بخش ۵: پردازش سفارش
+  </a>
+</section>
+
+</main>
+
+<footer class="footer">
+  <p>© تیم فنی اسنپ! مارکت — مستند POS Integration (v2.1.1)</p>
+</footer>
+
+<script>
+function copyCode(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  const text = pre ? pre.innerText : "";
+  navigator.clipboard.writeText(text);
+  btn.innerText = "Copied ✓";
+  setTimeout(() => btn.innerText = "Copy", 1400);
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>بخش ۵ – پردازش سفارش | راهنمای یکپارچه‌سازی POS با اسنپ! مارکت</title>
+  <link rel="stylesheet" href="../style.css" />
+  <style>
+    pre, code { direction: ltr; text-align: left; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="container">
+    <nav class="breadcrumb">
+      <a href="../index.html">خانه</a> /
+      <a href="04-order.html">بخش ۴: سفارش‌ها</a> /
+      <span>بخش ۵: پردازش سفارش</span>
+    </nav>
+    <h1>۵. پردازش سفارش (Order Processing)</h1>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۵.۱ چرا این بخش حیاتی است؟</h2>
+    <p>
+      این بخش دقیقاً مشخص می‌کند POS شما بعد از دریافت سفارش چه کارهایی باید انجام دهد و با چه ترتیب و زمان‌بندی‌ای.
+      بخش «پردازش سفارش» مستقیم روی تجربه مشتری، نرخ NFC و تماس‌های مرکز تماس اثر می‌گذارد.
+    </p>
+
+    <div class="callout danger">
+      <strong>نقطه شکست رایج:</strong>
+      اگر POS بعد از Ack، تصمیم‌گیری (تأیید یا نیاز به تماس) را با تأخیر انجام دهد،
+      سفارش از مسیر خودکار خارج شده و برای بررسی به مرکز تماس ارجاع می‌شود.
+    </div>
+
+    <ul>
+      <li><strong>Webhook</strong> و <strong>MQTT</strong> فقط کانال دریافت «داده سفارش» هستند.</li>
+      <li>اعمال وضعیت‌ها (Ack / Pick / Accept / Reject) از طریق <strong>Order API</strong> انجام می‌شود.</li>
+      <li>هر مرحله «برگشت‌پذیر» نیست (مگر در سناریوی ویرایش سفارش).</li>
+    </ul>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۵.۲ مرور چرخه عمر سفارش (State Machine)</h2>
+
+    <p>
+      سفارش بعد از ثبت/ویرایش با وضعیت‌های مشخص به فروشگاه ارسال می‌شود و تا زمانی که فروشگاه پاسخ ندهد
+      ممکن است مجدداً ارسال شود. سپس با انجام اکشن‌های فروشگاه، وضعیت سفارش در پلتفرم تغییر می‌کند:
+    </p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>56 / 714 (New / Re-send)  →  ACK (204)  →  61
+                                ↓
+                              PICK (204) → 713
+                                ↓
+                        تصمیم نهایی: ACCEPT یا REJECT(Need Call)</code></pre>
+    </div>
+
+    <div class="callout">
+      <strong>طبق داک:</strong>
+      سفارش ابتدا با کد ۵۶ ارسال می‌شود، ممکن است مجدد با کد ۷۱۴ تکرار شود،
+      پس از Ack وضعیت به ۶۱ و پس از Pick به ۷۱۳ تغییر می‌کند. 
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۵.۳ SLA و پنجره‌های زمانی (برای جلوگیری از Call Center)</h2>
+
+    <p>
+      بعد از دریافت سفارش، دو کار باید خیلی سریع انجام شود:
+    </p>
+
+    <ul>
+      <li><strong>Ack</strong>: به محض دریافت سفارش (برای اعلام «دریافت شد»)</li>
+      <li><strong>تصمیم‌گیری بعد از Ack</strong>: سفارش باید سریعاً به «تأیید» یا «نیاز به تماس» برسد</li>
+    </ul>
+
+    <div class="callout danger">
+      <strong>قانون مهم داک:</strong>
+      اگر سفارش در پنجره زمانی <strong>۵ دقیقه پس از Ack</strong> به «تأیید یا نیاز به تماس» نرسد،
+      برای بررسی به مرکز تماس ارجاع داده می‌شود.
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۵.۴ آدرس پایه Order API</h2>
+    <p>
+      تمام اندپوینت‌های پردازش سفارش زیر این Base قرار دارند:
+    </p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>https://api-proxy.snapp.express/va/v1/order</code></pre>
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۵.۵ ACK – تأیید دریافت سفارش</h2>
+
+    <p>
+      بلافاصله بعد از دریافت سفارش (Webhook یا MQTT)، POS باید Ack ارسال کند.
+      Ack یعنی «سفارش به دست من رسید و در سیستم ثبت شد».
+    </p>
+
+    <h3>Endpoint</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://api-proxy.snapp.express/va/v1/order/{orderCode}/ack
+Authorization: Bearer &lt;access_token&gt;</code></pre>
+    </div>
+
+    <h3>نمونه</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>curl --location --request POST \
+'https://api-proxy.snapp.express/va/v1/order/8549yn4g/ack' \
+--header 'Authorization: Bearer some_token_string'</code></pre>
+    </div>
+
+    <div class="callout">
+      <strong>Response:</strong> در موفقیت <code>204 No Content</code> و بدنه خالی.
+    </div>
+
+    <div class="callout danger">
+      <strong>خطای رایج:</strong>
+      <code>1023</code> یعنی orderCode پیدا نشد (معمولاً orderCode اشتباه یا سفارش منقضی/لغو شده).
+    </div>
+
+    <h3>الزام پیاده‌سازی در POS</h3>
+    <ul>
+      <li>قبل از Ack: سفارش را در DB داخلی ثبت کنید (با کلید یکتا = <code>orderCode</code>)</li>
+      <li>Ack باید <strong>Idempotent</strong> باشد: اگر دوباره آمد، دوباره Ack بزنید (یا موفق تلقی کنید)</li>
+      <li>بعد از Ack: تایمر ۵ دقیقه‌ای تصمیم‌گیری را فعال کنید (قبول / نیاز به تماس)</li>
+    </ul>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۵.۶ PICK – «باز کردن سفارش توسط اپراتور»</h2>
+
+    <p>
+      Pick به معنی این است که اپراتور فروشگاه سفارش را باز کرده و وارد فاز آماده‌سازی شده است.
+      این مرحله معمولاً بعد از Ack و قبل از تصمیم نهایی انجام می‌شود.
+    </p>
+
+    <h3>Endpoint</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://api-proxy.snapp.express/va/v1/order/{orderCode}/pick
+Authorization: Bearer &lt;access_token&gt;</code></pre>
+    </div>
+
+    <h3>نمونه</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>curl --location --request POST \
+'https://api-proxy.snapp.express/va/v1/order/8549yn4g/pick' \
+--header 'Authorization: Bearer some_token_string'</code></pre>
+    </div>
+
+    <div class="callout">
+      <strong>Response:</strong> در موفقیت <code>204 No Content</code>.
+    </div>
+
+    <div class="callout danger">
+      <strong>خطاهای مهم Pick:</strong>
+      <ul>
+        <li><code>1023</code> سفارش یافت نشد</li>
+        <li><code>1068</code> قبلاً Pick شده</li>
+        <li><code>1059</code> قبلاً تایید شده</li>
+        <li><code>1060</code> قبلاً Need Call / Reject شده</li>
+      </ul>
+    </div>
+
+    <div class="callout">
+      <strong>توصیه اجرایی:</strong>
+      Pick را به «باز شدن صفحه سفارش در UI» گره بزنید، نه به «پایان آماده‌سازی».
+      (پایان آماده‌سازی در این داک با Accept/Need Call مدیریت می‌شود.)
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۵.۷ ACCEPT – تأیید سفارش</h2>
+
+    <p>
+      وقتی فروشگاه مطمئن است سفارش قابل انجام است، باید Accept ارسال کند.
+      این مرحله سفارش را «تأیید» می‌کند.
+    </p>
+
+    <h3>Endpoint</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://api-proxy.snapp.express/va/v1/order/{orderCode}/accept
+Authorization: Bearer &lt;access_token&gt;
+Content-Type: application/json</code></pre>
+    </div>
+
+    <h3>Body (طبق داک)</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>{
+  "packingPrice": 0,
+  "delta": 0,
+  "deliveryTime": 0,
+  "riderPickupTime": 0
+}</code></pre>
+    </div>
+
+    <div class="callout">
+      <strong>معنی فیلدها:</strong>
+      <ul>
+        <li><code>packingPrice</code> همیشه <strong>۰</strong> است.</li>
+        <li><code>delta</code> میزان اختلاف قیمت (به تومان) بین POS و سفارش است.</li>
+        <li><code>deliveryTime</code> فقط در حالت Own Delivery، «زمان تحویل به مشتری» است؛ در غیر این صورت <strong>۰</strong>.</li>
+        <li><code>riderPickupTime</code> زمان جمع‌آوری و بسته‌بندی در فروشگاه است (مبنای زمان رسیدن پیک).</li>
+      </ul>
+    </div>
+
+    <div class="callout danger">
+      <strong>خطاهای مهم Accept:</strong>
+      <ul>
+        <li><code>2110</code> زمان دلیوری غیرمجاز</li>
+        <li><code>503</code> خطای دسترسی (موقت)</li>
+        <li><code>1059</code> قبلاً تایید شده</li>
+        <li><code>1060</code> قبلاً Need Call شده</li>
+      </ul>
+    </div>
+
+    <h3>الزام‌های پیاده‌سازی (برای کاهش NFC/Call)</h3>
+    <ul>
+      <li>اگر کالاها OK هستند، Accept را <strong>داخل پنجره ۵ دقیقه‌ای بعد از Ack</strong> ارسال کنید.</li>
+      <li>اگر «ابهام» دارید (کالا نیست/جایگزین دارد/نیاز به هماهنگی)، بجای معطل کردن، Need Call کنید (Reject با reasonId).</li>
+      <li>Accept هم باید Idempotent باشد: اگر دوباره ارسال شد و خطای «قبلاً تایید شده» آمد، موفق تلقی کنید.</li>
+    </ul>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۵.۸ Need Call (Reject) – ارسال به مرکز تماس با دلیل + توضیح + جایگزین</h2>
+
+    <p>
+      در این داک، Reject یعنی بردن سفارش به وضعیت «نیاز به تماس».
+      هدف این است که با ارسال اطلاعات دقیق در همان درخواست،
+      تعداد تماس‌های مرکز تماس با فروشگاه کم شود و تصمیم نهایی سریع‌تر گرفته شود.
+    </p>
+
+    <h3>قدم ۱: دریافت لیست دلیل‌ها (Decline Reasons)</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>GET https://api-proxy.snapp.express/va/v1/order/decline-reason/
+Authorization: Bearer &lt;access_token&gt;</code></pre>
+    </div>
+
+    <h3>قدم ۲: ارسال Need Call (Reject)</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://api-proxy.snapp.express/va/v1/order/{orderCode}/reject
+Authorization: Bearer &lt;access_token&gt;
+Content-Type: application/json</code></pre>
+    </div>
+
+    <h3>Body استاندارد (پیشنهادی و Vendor-friendly)</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>{
+  "reasonId": 177,
+  "comment": "شیر این برند موجود نیست. امکان ارسال برند X یا Y هست.",
+  "nonExistentProducts": [
+    {
+      "barcode": "34144555",
+      "suggestedProductBarcodes": ["53535222", "4568745451"]
+    }
+  ]
+}</code></pre>
+    </div>
+
+    <div class="callout danger">
+      <strong>محدودیت مهم:</strong>
+      اگر بیش از <strong>۱ ساعت از زمان تأیید</strong> گذشته باشد،
+      ممکن است خطای <code>1059</code> دریافت کنید.
+    </div>
+
+    <div class="callout">
+      <strong>بهترین‌عمل برای کاهش تماس:</strong>
+      <ul>
+        <li>حتماً <code>comment</code> را دقیق و عملیاتی بنویسید.</li>
+        <li>اگر فقط چند قلم مشکل دارند، برای همان‌ها <code>nonExistentProducts</code> و جایگزین پیشنهاد دهید.</li>
+        <li>اگر مشکل «قیمت/دلتا» است، مقدار <code>delta</code> را در Accept درست کنید یا Need Call را با توضیح شفاف بفرستید.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۵.۹ جدول وضعیت‌ها (StatusCode) برای پیاده‌سازی درست در POS</h2>
+
+    <p>
+      در دیتای دریافتی (Webhook/MQTT) فیلد <code>statusCode</code> می‌آید.
+      پیشنهاد می‌شود POS بر اساس آن رفتار کند:
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>statusCode</th>
+          <th>معنی</th>
+          <th>اقدام پیشنهادی POS</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>56</td><td>سفارش ثبت یا ویرایش شده</td><td>ثبت/آپدیت در DB → Ack</td></tr>
+        <tr><td>714</td><td>ارسال مجدد سفارش</td><td>Idempotent upsert → اگر Ack نشده: Ack</td></tr>
+        <tr><td>61</td><td>Ack شده</td><td>ورود به فاز عملیاتی → Pick/Decision</td></tr>
+        <tr><td>713</td><td>Pick شده</td><td>اپراتور در جریان است → Decision سریع</td></tr>
+        <tr><td>42</td><td>تایید شده / ویرایش تایید شده</td><td>ثبت در DB و ادامه عملیات</td></tr>
+        <tr><td>51</td><td>Need Call / رد شده و در صف مرکز تماس</td><td>ثبت، جلوگیری از عملیات تکراری</td></tr>
+        <tr><td>54</td><td>لغو شده</td><td>بستن سفارش در POS</td></tr>
+        <tr><td>71</td><td>نیازمند پرداخت اضافه</td><td>نمایش به اپراتور (بدون تغییر خودسرانه)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۵.۱۰ سناریوهای اجرایی (برای جلوگیری از NFC / False-Flow)</h2>
+
+    <h3>سناریو A: سفارش جدید (Happy Path)</h3>
+    <ol>
+      <li>Webhook رسید (56/714) → سفارش را Idempotent در DB ذخیره کن</li>
+      <li>فوراً Ack بزن</li>
+      <li>اپراتور سفارش را باز کرد → Pick</li>
+      <li>همه اقلام OK → Accept (داخل پنجره ۵ دقیقه بعد از Ack)</li>
+    </ol>
+
+    <h3>سناریو B: چند قلم موجود نیست ولی جایگزین دارید</h3>
+    <ol>
+      <li>Ack سریع</li>
+      <li>Pick</li>
+      <li>Reject(Need Call) با <code>reasonId</code> + <code>comment</code> دقیق + <code>suggestedProductBarcodes</code></li>
+      <li>همزمان در POS، موجودی SKUهای مشکل‌دار را اصلاح کنید و در فلو سینک به‌روز کنید (برای کاهش تکرار NFC)</li>
+    </ol>
+
+    <h3>سناریو C: سفارش تکراری/ارسال مجدد (714)</h3>
+    <ul>
+      <li>اگر سفارش قبلاً در DB هست، دوباره ایجاد نکنید؛ فقط Upsert کنید</li>
+      <li>اگر Ack زده شده، Ack مجدد هم قابل قبول است (Idempotent)</li>
+    </ul>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۵.۱۱ Error Handling و Retry (اصولی و امن)</h2>
+
+    <ul>
+      <li>برای خطاهای <strong>شبکه/Timeout/5xx</strong>: Retry با backoff (۱s، ۲s، ۴s، ۸s) و حداکثر ۳–۵ بار</li>
+      <li>برای خطاهای «منطقی» مثل <code>1023</code>، <code>1059</code>، <code>1060</code>، <code>1068</code>: Retry نکنید؛ فقط Log + کنترل جریان</li>
+      <li>برای جلوگیری از عملیات تکراری، درخواست‌ها را Idempotent طراحی کنید (کلید داخلی: orderCode + action)</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Log پیشنهادی:</strong>
+      <code>(orderCode, statusCode_in, action, sent_at, http_status, error_code, latency_ms)</code>
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۵.۱۲ ادامه مسیر</h2>
+    <p>
+      در بخش بعدی، ساختار خطاها، پیام‌های استاندارد و سیاست Retry را دقیق‌تر و با مثال‌های بیشتر بررسی می‌کنیم.
+    </p>
+    <a href="06-errors.html" class="btn-primary">رفتن به بخش ۶: ارور هندلینگ</a>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <p>© تیم فنی اسنپ! مارکت — مستند POS Integration (v2.1.1)</p>
+</footer>
+
+<script>
+function copyCode(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  const text = pre ? pre.innerText : "";
+  navigator.clipboard.writeText(text);
+  btn.innerText = "Copied ✓";
+  setTimeout(() => btn.innerText = "Copy", 1400);
+}
+</script>
+
+</body>
+</html>

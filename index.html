@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>راهنمای یکپارچه‌سازی POS با اسنپ! مارکت</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+<header class="header hero">
+  <div class="container hero-inner">
+    <img src="pages/assets/logo.png" alt="Snapp Market Logo" class="logo hero-logo" />
+
+    <div class="hero-text">
+      <span class="badge">POS Integration • v2.1.1</span>
+      <h1>راهنمای یکپارچه‌سازی POS<br/>با سامانه فروش آنلاین اسنپ! مارکت</h1>
+      <p class="hero-sub">
+        مستند رسمی اتصال نرم‌افزارهای فروشگاهی (POS) به اسنپ! مارکت  
+        با تمرکز بر <strong>پایداری، کاهش NFC، کنترل Drift و آمادگی Go-Live</strong>
+      </p>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- ================= INTRO ================= -->
+  <section class="intro intro-card">
+    <h2>این مستند برای چه کسانی است؟</h2>
+    <p>
+      این مستند برای تیم‌های فنی و عملیاتی Vendorها طراحی شده است که
+      مسئول توسعه یا نگهداری نرم‌افزار POS هستند و قصد دارند
+      اتصال پایدار و Production-Ready با اسنپ! مارکت داشته باشند.
+    </p>
+  </section>
+
+  <!-- ================= HOW TO READ ================= -->
+  <section class="panel">
+    <h2>مسیر پیشنهادی مطالعه</h2>
+    <p class="text-muted">
+      اگر اولین بار است این مستند را می‌خوانید، مسیر زیر توصیه می‌شود:
+    </p>
+
+    <ol class="reading-path">
+      <li>مقدمه و تعاریف → درک کانتکست کلی</li>
+      <li>احراز هویت → اتصال امن و پایدار</li>
+      <li>محصول، قیمت و موجودی → کاهش Drift و NFC</li>
+      <li>سفارش و State Machine → جلوگیری از خطاهای عملیاتی</li>
+      <li>ارور هندلینگ و Sync Strategy → Production-grade شدن</li>
+      <li>چک‌لیست نهایی → آمادگی Go-Live</li>
+    </ol>
+  </section>
+
+  <!-- ================= SECTIONS GRID ================= -->
+  <nav class="sections">
+    <h2 class="sections-title">فهرست مستندات</h2>
+
+    <ul>
+      <li><a href="pages/01-intro.html">۱. مقدمه و تعاریف</a></li>
+      <li><a href="pages/02-auth.html">۲. احراز هویت (OAuth2)</a></li>
+      <li><a href="pages/03-product.html">۳. محصولات، قیمت و موجودی</a></li>
+      <li><a href="pages/04-order.html">۴. سفارش‌ها، Webhook و MQTT</a></li>
+      <li><a href="pages/05-process.html">۵. State Machine سفارش</a></li>
+      <li><a href="pages/06-errors.html">۶. Error Handling & Retry</a></li>
+      <li><a href="pages/07-sync-strategy.html">۷. Sync Strategy و Drift Control</a></li>
+      <li><a href="pages/08-checklist.html">۸. چک‌لیست نهایی و Go-Live</a></li>
+    </ul>
+  </nav>
+
+  <!-- ================= IMPORTANT NOTE ================= -->
+  <section class="notes">
+    <h3>نکته بسیار مهم قبل از Go-Live</h3>
+    <p>
+      بخش
+      <a href="pages/07-sync-strategy.html">استراتژی سینک</a>
+      و
+      <a href="pages/08-checklist.html">چک‌لیست نهایی</a>
+      فقط توضیح فنی نیستند؛
+      این دو بخش تعیین می‌کنند که سیستم شما
+      در دنیای واقعی فروشگاه (با خطا، تأخیر و رفتار انسانی)
+      چقدر پایدار خواهد بود.
+    </p>
+
+    <p class="text-muted">
+      توصیه می‌شود این دو بخش قبل از Go-Live توسط تیم فنی و عملیاتی
+      به‌صورت مشترک مرور و تأیید شوند.
+    </p>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <p>
+    © تیم فنی اسنپ! مارکت — POS Integration Documentation  
+    <span class="text-muted">Version 2.1.1 • Production Ready</span>
+  </p>
+</footer>
+
+</body>
+</html>

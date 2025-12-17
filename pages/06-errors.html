@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>بخش ۶ – ارور هندلینگ و ریکاوری | راهنمای یکپارچه‌سازی POS با اسنپ! مارکت</title>
+  <link rel="stylesheet" href="../style.css" />
+  <style>
+    pre, code { direction: ltr; text-align: left; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="container">
+    <nav class="breadcrumb">
+      <a href="../index.html">خانه</a> /
+      <a href="05-process.html">بخش ۵: پردازش سفارش</a> /
+      <span>بخش ۶: ارور هندلینگ</span>
+    </nav>
+    <h1>۶. ارور هندلینگ و بازیابی (Error Handling & Recovery)</h1>
+  </div>
+</header>
+
+<main class="container">
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۶.۱ هدف این بخش</h2>
+  <p>
+    خطا در ارتباط بین POS و پلتفرم اجتناب‌ناپذیر است.
+    آنچه اهمیت دارد، <strong>نحوه واکنش سیستم به خطا</strong> است.
+  </p>
+  <p>
+    هدف این بخش:
+  </p>
+  <ul>
+    <li>تبدیل خطا به «اقدام مشخص» برای POS</li>
+    <li>جلوگیری از Retry اشتباه و عملیات تکراری</li>
+    <li>حفظ هم‌ترازی داده‌ها (Order / Product / Inventory)</li>
+    <li>کاهش NFC و ارجاع غیرضروری به مرکز تماس</li>
+  </ul>
+
+  <div class="callout">
+    <strong>اصل کلیدی:</strong>
+    همه خطاها Retry نمی‌خواهند؛
+    بعضی خطاها نیاز به اصلاح داده یا توقف جریان دارند.
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۶.۲ نگاشت وضعیت HTTP به اقدام</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>HTTP Status</th>
+        <th>معنی</th>
+        <th>اقدام استاندارد POS</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>200 / 204</td>
+        <td>موفق</td>
+        <td>ثبت نتیجه و ادامه جریان</td>
+      </tr>
+      <tr>
+        <td>400</td>
+        <td>خطای داده/اعتبارسنجی</td>
+        <td>نمایش پیام به اپراتور، اصلاح داده، ارسال مجدد</td>
+      </tr>
+      <tr>
+        <td>401</td>
+        <td>توکن نامعتبر یا منقضی</td>
+        <td>Refresh Token → در صورت شکست، Login مجدد</td>
+      </tr>
+      <tr>
+        <td>403</td>
+        <td>عدم دسترسی</td>
+        <td>بررسی vendorCode و مجوزهای توکن</td>
+      </tr>
+      <tr>
+        <td>405</td>
+        <td>Method Not Allowed</td>
+        <td>اصلاح متد یا URL اندپوینت</td>
+      </tr>
+      <tr>
+        <td>5xx</td>
+        <td>خطای موقت سرویس/شبکه</td>
+        <td>Retry با Backoff نمایی + Idempotency</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۶.۳ خطاهای دامنه (Domain Errors)</h2>
+
+  <p>
+    این خطاها با HTTP 200/4xx برمی‌گردند ولی
+    تصمیم‌گیری اصلی بر اساس <code>error.code</code> انجام می‌شود.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>کد</th>
+        <th>شرح</th>
+        <th>اقدام پیشنهادی POS</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>3001</td>
+        <td>نام کاربری یا رمز عبور نامعتبر</td>
+        <td>بررسی اطلاعات ورود و تلاش مجدد</td>
+      </tr>
+      <tr>
+        <td>3002</td>
+        <td>client_id یا client_secret نامعتبر</td>
+        <td>بررسی تنظیمات محیط (Prod/Sandbox)</td>
+      </tr>
+      <tr>
+        <td>3003</td>
+        <td>توکن منقضی شده</td>
+        <td>Refresh Token</td>
+      </tr>
+      <tr>
+        <td>3004</td>
+        <td>عدم دسترسی/احراز ناموفق</td>
+        <td>Refresh → Login مجدد در صورت تداوم</td>
+      </tr>
+      <tr>
+        <td>1029</td>
+        <td>VendorCode نامعتبر</td>
+        <td>تطبیق VendorCode با توکن</td>
+      </tr>
+      <tr>
+        <td>1023</td>
+        <td>سفارش یافت نشد</td>
+        <td>بررسی orderCode؛ Retry نکنید</td>
+      </tr>
+      <tr>
+        <td>1068</td>
+        <td>Pick تکراری</td>
+        <td>به‌عنوان موفق ثبت شود</td>
+      </tr>
+      <tr>
+        <td>1059</td>
+        <td>Accept تکراری</td>
+        <td>وضعیت جلوتر است؛ ادامه دهید</td>
+      </tr>
+      <tr>
+        <td>1060</td>
+        <td>Reject تکراری</td>
+        <td>سفارش نهایی شده؛ فقط ثبت داخلی</td>
+      </tr>
+      <tr>
+        <td>503</td>
+        <td>خطای دسترسی</td>
+        <td>در صورت موقت بودن، Retry محدود</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۶.۴ قالب‌های خطای نمونه</h2>
+
+  <h3>۶.۴.۱ احراز هویت (3004)</h3>
+  <div class="code-block dark">
+<pre><code>{
+  "status": false,
+  "error": {
+    "code": 3004,
+    "message": "خطایی رخ داده است. لطفاً مجدداً امتحان کنید."
+  }
+}</code></pre>
+  </div>
+
+  <h3>۶.۴.۲ خطای اعتبارسنجی (HTTP 400)</h3>
+  <div class="code-block dark">
+<pre><code>{
+  "errors": {
+    "[comment]": "این مقدار نباید خالی باشد.",
+    "[nonExistentProducts][0][barcode]": "فرمت بارکد نامعتبر است."
+  }
+}</code></pre>
+  </div>
+
+  <h3>۶.۴.۳ VendorCode نامعتبر (1029)</h3>
+  <div class="code-block dark">
+<pre><code>{
+  "status": false,
+  "error": {
+    "code": 1029,
+    "message": "کد فروشگاه نامعتبر است."
+  }
+}</code></pre>
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۶.۵ سیاست Retry (چه زمانی تکرار کنیم؟)</h2>
+
+  <ul>
+    <li>
+      <strong>Retry مجاز:</strong>
+      Timeout، Network Error، HTTP 5xx
+    </li>
+    <li>
+      <strong>Retry غیرمجاز:</strong>
+      400، 403، 1023، 1059، 1060، 1068
+    </li>
+    <li>
+      Backoff پیشنهادی:
+      <code>1s → 2s → 4s → 8s</code>
+    </li>
+    <li>
+      حداکثر تلاش: <strong>۳ تا ۵ بار</strong>
+    </li>
+  </ul>
+
+  <div class="callout danger">
+    <strong>هشدار:</strong>
+    Retry کورکورانه روی خطاهای منطقی
+    باعث عملیات تکراری و افزایش تماس مرکز تماس می‌شود.
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۶.۶ Idempotency (الزام طراحی)</h2>
+
+  <p>
+    تمام عملیات حساس (Ack / Pick / Accept / Reject)
+    باید به‌صورت <strong>Idempotent</strong> پیاده‌سازی شوند.
+  </p>
+
+  <ul>
+    <li>کلید پیشنهادی: <code>orderCode + action</code></li>
+    <li>در صورت دریافت خطای «قبلاً انجام شده»، عملیات را موفق تلقی کنید</li>
+    <li>از اجرای مجدد منطق تجاری جلوگیری کنید</li>
+  </ul>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۶.۷ پیام‌های قابل‌فهم برای اپراتور</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>کد/وضعیت</th>
+        <th>پیام پیشنهادی</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>401 / 3004</td>
+        <td>نشست شما منقضی شده است؛ لطفاً دوباره وارد شوید.</td>
+      </tr>
+      <tr>
+        <td>400</td>
+        <td>اطلاعات واردشده صحیح نیست؛ لطفاً اصلاح کنید.</td>
+      </tr>
+      <tr>
+        <td>1023</td>
+        <td>سفارش یافت نشد یا منقضی شده است.</td>
+      </tr>
+      <tr>
+        <td>1068 / 1059 / 1060</td>
+        <td>این عملیات قبلاً انجام شده است.</td>
+      </tr>
+      <tr>
+        <td>5xx</td>
+        <td>اختلال موقت؛ در حال تلاش مجدد هستیم.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۶.۸ لاگینگ و مانیتورینگ</h2>
+
+  <ul>
+    <li>ثبت: <code>orderCode</code>، <code>vendorCode</code>، endpoint، action</li>
+    <li>ثبت HTTP Status و Domain Error Code</li>
+    <li>ثبت latency و تعداد Retry</li>
+    <li>عدم ذخیره داده‌های حساس مشتری (PII)</li>
+    <li>آلارم روی نرخ غیرعادی 5xx یا Timeout</li>
+  </ul>
+
+  <div class="callout">
+    <strong>فرمت لاگ پیشنهادی:</strong>
+    <code>(orderCode, action, http_status, error_code, latency_ms)</code>
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۶.۹ ادامه مسیر</h2>
+  <p>
+    در بخش بعدی، استراتژی همگام‌سازی داده‌ها
+    (Weak Signal → Full Resync) و کنترل Drift توضیح داده می‌شود.
+  </p>
+  <a href="07-sync-strategy.html" class="btn-primary">
+    رفتن به بخش ۷: استراتژی سینک
+  </a>
+</section>
+
+</main>
+
+<footer class="footer">
+  <p>© تیم فنی اسنپ! مارکت — مستند POS Integration (v2.1.1)</p>
+</footer>
+
+</body>
+</html>

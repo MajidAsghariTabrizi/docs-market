@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>بخش ۳ – محصولات، قیمت و موجودی | راهنمای POS اسنپ! مارکت</title>
+  <link rel="stylesheet" href="../style.css" />
+</head>
+<body>
+
+<header class="header">
+  <div class="container">
+    <nav class="breadcrumb">
+      <a href="../index.html">خانه</a> /
+      <a href="02-auth.html">بخش ۲: احراز هویت</a> /
+      <span>بخش ۳: محصولات</span>
+    </nav>
+    <h1>۳. محصولات، قیمت و موجودی</h1>
+  </div>
+</header>
+
+<main class="container">
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۳.۱ چرا این بخش حیاتی است؟</h2>
+  <p>
+    همگام‌سازی صحیح محصولات، قیمت و موجودی نقش مستقیمی در کاهش
+    <strong>NFC</strong>، جلوگیری از <strong>False Positive / False Negative</strong>
+    و بهبود تجربه مشتری دارد.
+  </p>
+  <p>
+    در مدل رایج صنعت گروسری (Vendor → POS → Platform)،
+    اختلاف بین موجودی واقعی فروشگاه و عدد ثبت‌شده در سیستم
+    یک <strong>پدیده طبیعی عملیاتی</strong> است، نه نشانه خرابی سیستم.
+  </p>
+
+  <ul>
+    <li><strong>False Positive:</strong> کالا در سیستم موجود است ولی فیزیکی وجود ندارد → Reject / NFC</li>
+    <li><strong>False Negative:</strong> کالا موجود است ولی در سیستم ثبت نشده → از دست رفتن فروش</li>
+    <li><strong>Price Drift:</strong> اختلاف قیمت POS و سفارش ثبت‌شده</li>
+  </ul>
+
+  <div class="callout">
+    <strong>هدف این APIها:</strong>
+    حذف کامل خطا نیست، بلکه کاهش اثر خطا بر سفارش و مشتری است.
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۳.۲ آدرس پایه و سیاست Batch</h2>
+  <p>
+    آدرس پایه APIهای محصول:
+    <code>https://api-proxy.snapp.express/va/v1/product</code>
+  </p>
+
+  <ul>
+    <li>
+      اندازه Batch در درخواست‌های Bulk می‌تواند
+      <strong>بین ۱۰۰ تا ۵۰۰ آیتم</strong> تنظیم شود.
+      <br>
+      <span class="text-muted">
+        پیشنهاد می‌شود Batch Size بر اساس توان POS، کیفیت شبکه و نرخ خطا انتخاب شود.
+      </span>
+    </li>
+    <li>قیمت‌ها به <strong>تومان</strong> ارسال می‌شوند</li>
+    <li>تخفیف‌ها به‌صورت <strong>درصد</strong> هستند</li>
+  </ul>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۳.۳ همگام‌سازی قیمت و تخفیف (productDetails)</h2>
+
+  <p>
+    این endpoint برای ارسال یا بروزرسانی قیمت مصرف‌کننده و تخفیف فروشنده استفاده می‌شود.
+    برای محصولاتی که تازه وارد فروشگاه شده‌اند، ابتدا باید از این مسیر معرفی شوند.
+  </p>
+
+  <div class="code-block">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://api-proxy.snapp.express/va/v1/product/productDetails
+Authorization: Bearer &lt;access_token&gt;
+Content-Type: application/json</code></pre>
+  </div>
+
+  <div class="code-block dark">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>{
+  "vendorCode": "VENDOR_CODE",
+  "products": [
+    { "barcode": "1234", "price": 10000, "discount": 10 }
+  ]
+}</code></pre>
+  </div>
+
+  <p>
+    پاسخ شامل آرایه <code>failedItems</code> است و موفقیت یا شکست هر بارکد
+    به‌صورت مجزا مشخص می‌شود.
+  </p>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۳.۴ همگام‌سازی موجودی (stock)</h2>
+
+  <p>
+    موجودی، حساس‌ترین داده عملیاتی است. تأخیر در ارسال آن
+    یکی از رایج‌ترین دلایل NFC در گروسری آنلاین محسوب می‌شود.
+  </p>
+
+  <div class="code-block">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://api-proxy.snapp.express/va/v1/product/stock
+Authorization: Bearer &lt;access_token&gt;
+Content-Type: application/json</code></pre>
+  </div>
+
+  <div class="code-block dark">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>{
+  "vendorCode": "VENDOR_CODE",
+  "stocks": [
+    { "barcode": "1234", "stock": 18 }
+  ]
+}</code></pre>
+  </div>
+
+  <div class="callout danger">
+    <strong>نکته عملی:</strong>
+    Batchهای دیرهنگام یا ارسال دوره‌ای موجودی
+    ریسک False Positive را افزایش می‌دهد.
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۳.۵ فعال / غیرفعال‌سازی محصول</h2>
+
+  <p>
+    در شرایطی که محصول به‌طور فیزیکی قابل فروش نیست،
+    می‌توان آن را به‌صورت دستی غیرفعال کرد.
+  </p>
+
+  <div class="code-block">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>PUT https://api-proxy.snapp.express/va/v1/product/
+Authorization: Bearer &lt;access_token&gt;
+Content-Type: application/json</code></pre>
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۳.۶ بروزرسانی فقط قیمت (price)</h2>
+
+  <p>
+    اگر فقط قیمت تغییر کرده و تخفیف ثابت است،
+    استفاده از این endpoint توصیه می‌شود.
+  </p>
+
+  <div class="code-block">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://api-proxy.snapp.express/va/v1/product/price
+Authorization: Bearer &lt;access_token&gt;
+Content-Type: application/json</code></pre>
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۳.۷ ارسال عنوان محصول (title)</h2>
+
+  <p>
+    این endpoint برای اصلاح یا ارسال عنوان نمایشی محصولات فروشگاه استفاده می‌شود.
+    پاسخ موفق شامل <code>204 No Content</code> خواهد بود.
+  </p>
+
+  <div class="code-block">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://api-proxy.snapp.express/va/v1/product/title
+Authorization: Bearer &lt;access_token&gt;
+Content-Type: application/json</code></pre>
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۳.۸ استعلام وضعیت ثبت‌شده (get-info)</h2>
+
+  <p>
+    این endpoint ابزار اصلی بررسی Drift بین POS و داده ثبت‌شده در پلتفرم است
+    و برای دیباگ اختلاف‌ها استفاده می‌شود.
+  </p>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۳.۹ توصیه‌های عملی برای کاهش ریسک</h2>
+
+  <ul>
+    <li>Sync موجودی را تا حد امکان به رویداد واقعی فروش نزدیک کنید</li>
+    <li>پس از قطعی POS یا شبکه، یک Resync محدود انجام دهید</li>
+    <li>Retry فقط برای خطاهای موقتی (timeout / 5xx)</li>
+    <li>پاسخ هر Batch را بررسی و فقط موارد ناموفق را اصلاح کنید</li>
+    <li>انتظار دقت ۱۰۰٪ نداشته باشید؛ هدف کاهش اثر خطاست</li>
+  </ul>
+
+  <div class="callout">
+    <strong>جمع‌بندی:</strong>
+    این APIها ابزار مدیریت ریسک هستند،
+    نه تضمین بی‌خطایی موجودی.
+  </div>
+</section>
+
+<section class="panel">
+  <h2>۳.۱۰ ادامه مسیر</h2>
+  <a href="04-order.html" class="btn-primary">
+    رفتن به بخش ۴: سفارش‌ها و Webhook / MQTT
+  </a>
+</section>
+
+</main>
+
+<footer class="footer">
+  <p>© تیم فنی اسنپ! مارکت — مستند POS Integration (v2.1.1)</p>
+</footer>
+
+<script>
+function copyCode(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  const text = pre ? pre.innerText : "";
+  navigator.clipboard.writeText(text);
+  btn.innerText = "Copied ✓";
+  setTimeout(() => btn.innerText = "Copy", 1400);
+}
+</script>
+
+</body>
+</html>

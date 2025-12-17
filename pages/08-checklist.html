@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>بخش ۸ – چک‌لیست نهایی و Go-Live | راهنمای POS اسنپ! مارکت</title>
+  <link rel="stylesheet" href="../style.css" />
+  <style>
+    pre, code { direction: ltr; text-align: left; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="container">
+    <nav class="breadcrumb">
+      <a href="../index.html">خانه</a> /
+      <a href="07-sync-strategy.html">بخش ۷: استراتژی سینک</a> /
+      <span>بخش ۸: چک‌لیست نهایی</span>
+    </nav>
+    <h1>۸. چک‌لیست نهایی، Go-Live و بهترین‌عمل‌ها</h1>
+  </div>
+</header>
+
+<main class="container">
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۸.۱ هدف این چک‌لیست</h2>
+  <p>
+    این چک‌لیست برای اطمینان از آمادگی کامل سیستم POS جهت اتصال به محیط Production طراحی شده است.
+    تکمیل تمام موارد این بخش به معنی آن است که:
+  </p>
+  <ul>
+    <li>ریسک NFC و Reject غیرضروری به حداقل رسیده است</li>
+    <li>Live Sync و Resync به‌درستی پیاده‌سازی شده‌اند</li>
+    <li>سیستم در برابر خطا، قطعی شبکه و retry مقاوم است</li>
+    <li>تیم Vendor می‌تواند بدون وابستگی دائمی به پشتیبانی، سیستم را اداره کند</li>
+  </ul>
+
+  <div class="callout">
+    <strong>تعریف Done:</strong>
+    اگر حتی یکی از آیتم‌های حیاتی این چک‌لیست Done نباشد،
+    Go-Live توصیه نمی‌شود.
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۸.۲ چک‌لیست احراز هویت و اتصال (Security & Auth)</h2>
+  <ul>
+    <li>دریافت صحیح <code>access_token</code> و <code>refresh_token</code> از OAuth2</li>
+    <li>پیاده‌سازی Refresh خودکار توکن قبل از انقضا</li>
+    <li>مدیریت خطای 401 / 3003 / 3004 بدون توقف سیستم</li>
+    <li>عدم ذخیره client_secret، رمز عبور یا token در UI یا لاگ‌ها</li>
+    <li>استفاده از HTTPS در تمام درخواست‌ها (POS → Platform)</li>
+    <li>تفکیک محیط Sandbox و Production در تنظیمات</li>
+  </ul>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۸.۳ چک‌لیست داده‌های محصول، قیمت و موجودی</h2>
+  <ul>
+    <li>ارسال صحیح <code>vendorCode</code> در تمام endpointها</li>
+    <li>Live Sync موجودی (Stock) در نزدیک‌ترین زمان ممکن به تغییر واقعی</li>
+    <li>Live Sync قیمت در هر تغییر واقعی (نه صرفاً تغییر UI)</li>
+    <li>عدم تکیه صرف بر Bulk Sync؛ استفاده از Bulk فقط برای Resync</li>
+    <li>Batch size در بازه <strong>۱۰۰ تا ۵۰۰</strong> آیتم (قابل تنظیم)</li>
+    <li>مدیریت failedItems و Retry فقط روی آیتم‌های اصلاح‌شده</li>
+    <li>پیاده‌سازی کامل Active/Inactive برای کنترل فروش‌پذیری</li>
+  </ul>
+
+  <div class="callout">
+    <strong>یادآوری مهم:</strong>
+    موجودی مهم‌ترین عامل NFC است؛
+    اگر فقط یک چیز را عالی Sync می‌کنید، آن موجودی باشد.
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۸.۴ چک‌لیست سفارش و State Machine</h2>
+  <ul>
+    <li>دریافت صحیح سفارش از Webhook (HMAC + form-urlencoded)</li>
+    <li>ارسال ACK در کمتر از <strong>۵ ثانیه</strong></li>
+    <li>ارسال ACCEPT یا REJECT حداکثر تا <strong>۶۰ ثانیه</strong></li>
+    <li>ارسال PICK قبل از تحویل به پیک</li>
+    <li>پیاده‌سازی Idempotency برای Ack / Accept / Reject / Pick</li>
+    <li>در REJECT به دلیل OOS: صفر کردن موجودی در POS</li>
+    <li>مدیریت صحیح StatusCodeهای تکراری (1059 / 1060 / 1068)</li>
+  </ul>
+
+  <div class="callout danger">
+    <strong>ریسک عملیاتی:</strong>
+    تأخیر در ACK یا ACCEPT مستقیماً باعث تماس مشتری و مرکز تماس می‌شود.
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۸.۵ چک‌لیست مدیریت خطا و Retry</h2>
+  <ul>
+    <li>تفکیک خطای موقت (5xx/Timeout) از خطای منطقی (400/1023/403)</li>
+    <li>Retry فقط برای خطاهای موقت با Backoff نمایی (1s, 2s, 4s, 8s)</li>
+    <li>عدم Retry برای خطاهای منطقی یا تکراری</li>
+    <li>پیاده‌سازی Dead-Letter برای آیتم‌های مشکل‌دار داده‌ای</li>
+    <li>لاگ کامل شامل:
+      <code>(orderCode, action, http_status, error_code, latency)</code>
+    </li>
+  </ul>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۸.۶ چک‌لیست استراتژی سینک و Drift Control</h2>
+  <ul>
+    <li>پیاده‌سازی Live Sync event-based یا queue-based</li>
+    <li>تعریف Weak Signal (lag، failedItems، NFC، timeout)</li>
+    <li>اجرای Partial Resync برای SKUهای مشکوک</li>
+    <li>اجرای Full Resync فقط به‌صورت مرحله‌ای و batch-شده</li>
+    <li>عدم اجرای Full Resync بدون دلیل عملیاتی واضح</li>
+    <li>ثبت گزارش Resync برای Audit و تحلیل بعدی</li>
+  </ul>
+
+  <div class="callout">
+    <strong>نگاه بیزینسی:</strong>
+    Drift یک باگ نیست؛
+    اما بدون کنترل، هزینه مستقیم روی SLA و GMV دارد.
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۸.۷ مانیتورینگ، داشبورد و KPI</h2>
+  <ul>
+    <li>مانیتور Sync Lag (Price / Stock)</li>
+    <li>نرخ failedItems در Bulk</li>
+    <li>Retry Rate و Timeout Rate</li>
+    <li>تعداد Partial / Full Resync در روز</li>
+    <li>سیگنال‌های NFC / OOS Reject از سفارش‌ها</li>
+  </ul>
+
+  <div class="callout">
+    <strong>قاعده مدیریتی:</strong>
+    اگر Resync زیاد شده، مشکل معمولاً فرآیندی است نه API.
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۸.۸ تست نهایی قبل از Go-Live</h2>
+  <ol>
+    <li>ثبت سفارش تست در Sandbox و دریافت صحیح Webhook</li>
+    <li>اجرای کامل Ack → Accept → Pick بدون خطا</li>
+    <li>تست سناریوی Out of Stock و Reject</li>
+    <li>اجرای یک Full Resync بدون failedItems بحرانی</li>
+    <li>تطبیق قیمت و موجودی بین POS و پلتفرم</li>
+  </ol>
+
+  <div class="callout danger">
+    <strong>شرط Go-Live:</strong>
+    تا زمانی که تمام موارد بالا تأیید نشده‌اند،
+    ورود به Production توصیه نمی‌شود.
+  </div>
+</section>
+
+<!-- ===================================================== -->
+<section class="panel">
+  <h2>۸.۹ تأیید نهایی (Sign-off)</h2>
+
+  <p>
+    با تأیید این چک‌لیست، Vendor مسئولیت صحت داده‌های ارسالی از POS
+    و اجرای صحیح فرآیندهای سینک و سفارش را می‌پذیرد.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>نقش</th>
+        <th>نام</th>
+        <th>امضا / تاریخ</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>مسئول فنی Vendor</td>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>مسئول عملیات Vendor</td>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>تأیید فنی اسنپ! مارکت</td>
+        <td></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <a href="../index.html" class="btn-primary">بازگشت به صفحه اصلی مستند</a>
+</section>
+
+</main>
+
+<footer class="footer">
+  <p>© تیم فنی اسنپ! مارکت — مستند POS Integration | نسخه نهایی Go-Live</p>
+</footer>
+
+</body>
+</html>

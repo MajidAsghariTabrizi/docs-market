@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>بخش ۷ – استراتژی سینک (Weak Signal → Full Resync) | راهنمای POS اسنپ! مارکت</title>
+  <link rel="stylesheet" href="../style.css" />
+  <style>
+    pre, code { direction: ltr; text-align: left; }
+  </style>
+</head>
+
+<body>
+
+<header class="header">
+  <div class="container">
+    <nav class="breadcrumb">
+      <a href="../index.html">خانه</a> /
+      <a href="06-errors.html">بخش ۶: ارور هندلینگ</a> /
+      <span>بخش ۷: استراتژی سینک</span>
+    </nav>
+    <h1>۷. استراتژی سینک (Weak Signal → Full Resync)</h1>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۷.۱ هدف این بخش</h2>
+    <p>
+      هدف استراتژی سینک این است که <strong>قیمت، تخفیف، موجودی و وضعیت فعال/غیرفعال</strong>
+      بین POS و سامانه فروش آنلاین اسنپ! مارکت تا حد ممکن هم‌تراز بماند.
+      در صنعت گروسری، اختلاف موجودی (Inventory Inaccuracy / Drift) یک واقعیت طبیعی است؛
+      پس هدف این است که <strong>ریسک و اثر Drift</strong> را کنترل کنیم تا:
+    </p>
+    <ul>
+      <li><strong>False Positive</strong> (کالا موجود نشان داده شود ولی نباشد) کم شود → کاهش NFC/Reject</li>
+      <li><strong>False Negative</strong> (کالا موجود باشد ولی ناموجود نمایش داده شود) کم شود → جلوگیری از از دست رفتن فروش</li>
+      <li><strong>Price Drift</strong> کم شود → کاهش اختلاف قیمت، کاهش تماس و تجربه بهتر مشتری</li>
+    </ul>
+
+    <div class="callout">
+      <strong>خلاصه اجرایی:</strong>
+      Live Sync به تنهایی کافی نیست. شما باید یک مکانیزم “تشخیص سیگنال ضعیف” داشته باشید که
+      در صورت احتمال Drift، یک Resync هدفمند یا Full Resync اجرا کند.
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۷.۲ تعریف‌ها (برای پیاده‌سازی مشترک)</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>اصطلاح</th>
+          <th>تعریف کاربردی برای تیم POS</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Live Sync</td>
+          <td>
+            ارسال نزدیک به لحظه تغییرات (Stock/Price/Active/Title) به پلتفرم؛
+            معمولاً event-based یا queue-based.
+          </td>
+        </tr>
+        <tr>
+          <td>Weak Signal</td>
+          <td>
+            نشانه‌هایی که می‌گویند احتمالاً Live Sync درست کار نکرده یا Drift بالا رفته
+            (مثلاً lag زیاد، تعداد خطا بالا، افت نرخ آپدیت، افزایش rejection/NFC).
+          </td>
+        </tr>
+        <tr>
+          <td>Partial Resync</td>
+          <td>
+            Resync محدود فقط برای SKUهایی که مشکوک/تغییر یافته‌اند (کم‌هزینه‌تر، سریع‌تر).
+          </td>
+        </tr>
+        <tr>
+          <td>Full Resync</td>
+          <td>
+            Resync کامل همه SKUهای فروشگاه در batchهای استاندارد (پرهزینه‌تر، اما لازم در Drift شدید).
+          </td>
+        </tr>
+        <tr>
+          <td>Drift</td>
+          <td>
+            اختلاف میان داده ثبت‌شده در POS و داده‌ای که پلتفرم از فروشگاه می‌بیند.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۷.۳ سیاست Batch و ظرفیت عملیاتی</h2>
+
+    <p>
+      برای درخواست‌های Bulk (price/stock/productDetails/title/active) پیشنهاد می‌شود
+      اندازه Batch را در بازه <strong>۱۰۰ تا ۵۰۰</strong> تنظیم کنید.
+      انتخاب عدد دقیق به کیفیت شبکه، توان POS، و نرخ خطا بستگی دارد.
+    </p>
+
+    <div class="callout">
+      <strong>قاعده پیشنهادی (عملیاتی):</strong>
+      اگر نرخ خطا یا timeout بالا رفت، Batch را کوچک‌تر کنید (مثلاً ۱۵۰).
+      اگر پایدار بود و تعداد SKU زیاد است، Batch را بزرگ‌تر کنید (مثلاً ۴۰۰–۵۰۰).
+    </div>
+
+    <h3>چه چیزهایی را Batch کنید؟</h3>
+    <ul>
+      <li>Stock updates (موجودی)</li>
+      <li>Price updates (قیمت)</li>
+      <li>ProductDetails updates (قیمت+تخفیف)</li>
+      <li>Active state updates</li>
+      <li>Title updates (اگر نیاز دارید)</li>
+    </ul>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۷.۴ Weak Signal: چه زمانی باید به Drift شک کنید؟</h2>
+
+    <p>
+      Weak Signal یک “الگوریتم داخلی POS” است، نه یک endpoint در پلتفرم.
+      شما باید مجموعه‌ای از شاخص‌ها را مانیتور کنید و اگر هر کدام از آستانه عبور کرد،
+      Resync را فعال کنید.
+    </p>
+
+    <h3>سیگنال‌های رایج و پیشنهاد آستانه</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>سیگنال</th>
+          <th>تعریف</th>
+          <th>پیشنهاد آستانه</th>
+          <th>اقدام</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Sync Lag</td>
+          <td>زمان از آخرین آپدیت موفق price/stock</td>
+          <td>&gt; 10 دقیقه (فروشگاه پرتراکنش)</td>
+          <td>Partial Resync SKUهای تغییر یافته</td>
+        </tr>
+        <tr>
+          <td>FailedItems Spike</td>
+          <td>افزایش ناگهانی failedItems در bulk</td>
+          <td>&gt; 1% یا &gt; 20 آیتم در یک Batch</td>
+          <td>اصلاح داده + Retry هدفمند</td>
+        </tr>
+        <tr>
+          <td>Timeout / 5xx Rate</td>
+          <td>افزایش خطاهای موقت ارتباطی</td>
+          <td>&gt; 3 خطای پشت‌سرهم</td>
+          <td>Retry با Backoff + کاهش Batch</td>
+        </tr>
+        <tr>
+          <td>Ops Signals</td>
+          <td>NFC/Reject مرتبط با OOS در مدت کوتاه</td>
+          <td>افزایش غیرعادی نسبت به baseline</td>
+          <td>Full Resync یا Resync روی گروه SKU</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout danger">
+      <strong>هشدار:</strong>
+      در Drift شدید، بهترین واکنش “Retry کور” نیست؛
+      شما باید Resync را به شکل کنترل‌شده اجرا کنید تا سیستم پایدار شود.
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۷.۵ طراحی پیشنهادی (Developer-grade) برای سینک</h2>
+
+    <h3>۷.۵.۱ Sync Queue (الزام عملی)</h3>
+    <p>
+      پیشنهاد می‌شود تمام تغییرات در POS ابتدا وارد یک صف (Queue) شوند
+      و ارسال به پلتفرم توسط یک Sync Worker انجام شود.
+      این کار باعث می‌شود قطع شبکه یا restart سرویس، رویدادها را از بین نبرد.
+    </p>
+
+    <ul>
+      <li>صف می‌تواند DB table، Kafka، RabbitMQ یا هر سازوکار پایدار باشد.</li>
+      <li>کلید Idempotency داخلی: <code>vendorCode + barcode + field + updated_at</code></li>
+      <li>قابلیت dedup برای جلوگیری از ارسال‌های تکراری</li>
+      <li>dead-letter برای آیتم‌های مشکل‌دار (data issue) تا اپراتور اصلاح کند</li>
+    </ul>
+
+    <h3>۷.۵.۲ اولویت‌بندی (Business-impact aware)</h3>
+    <ul>
+      <li><strong>موجودی</strong> مهم‌تر از قیمت است (اثر مستقیم روی NFC)</li>
+      <li>SKUهای پرتراکنش یا پرفروش را با priority بالاتر Sync کنید</li>
+      <li>در ساعات شلوغ، Batch را کمی کوچک‌تر و frequency را بالاتر کنید</li>
+    </ul>
+
+    <div class="callout">
+      <strong>قانون ساده:</strong>
+      اگر مجبورید بین “کامل بودن” و “به‌موقع بودن” یکی را انتخاب کنید،
+      در گروسری آنلاین معمولاً “به‌موقع بودن موجودی” ارزشمندتر است.
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۷.۶ اجرای Partial Resync (کم‌هزینه و سریع)</h2>
+
+    <p>
+      Partial Resync یعنی فقط SKUهایی که احتمال Drift دارند را مجدد Sync کنیم.
+      این روش بهترین گزینه برای شرایطی است که Weak Signal خفیف است.
+    </p>
+
+    <h3>ورودی Partial Resync از کجا می‌آید؟</h3>
+    <ul>
+      <li>SKUهای تغییر یافته در ۳۰–۶۰ دقیقه اخیر (از log داخلی POS)</li>
+      <li>SKUهای fail شده در Bulk (failedItems)</li>
+      <li>SKUهایی که اپراتور گزارش کرده (مثلاً OOS پر تکرار)</li>
+    </ul>
+
+    <h3>الگوی پیشنهادی اجرای Partial Resync</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>1) candidate_barcodes = changed_recently ∪ failed_items ∪ manual_flags
+2) برای هر barcode:
+   - قیمت/تخفیف را با productDetails یا price به‌روز کن
+   - موجودی را با stock به‌روز کن
+   - اگر کالا نباید فروش برود: active=false
+3) نتیجه را لاگ کن (success/failedItems) و فقط failها را اصلاح و retry کن</code></pre>
+    </div>
+
+    <div class="callout">
+      <strong>نکته:</strong>
+      Partial Resync نباید باعث فشار زیاد به POS یا شبکه شود؛
+      آن را محدود و مرحله‌ای اجرا کنید.
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۷.۷ اجرای Full Resync (کنترل‌شده و مرحله‌ای)</h2>
+
+    <p>
+      Full Resync زمانی لازم است که Drift شدید است یا Live Sync برای مدتی از کار افتاده،
+      یا نرخ خطا/lag به سطحی رسیده که Partial Resync پاسخ نمی‌دهد.
+    </p>
+
+    <div class="callout danger">
+      <strong>نکته حیاتی:</strong>
+      Full Resync را به شکل “یک عملیات عظیمِ بدون کنترل” اجرا نکنید.
+      آن را batch-by-batch با checkpoint و قابلیت ادامه دادن (resume) پیاده کنید.
+    </div>
+
+    <h3>گام‌های استاندارد Full Resync</h3>
+    <ol>
+      <li>لیست SKUهای فروشگاه را از POS استخراج کنید (source of truth شما)</li>
+      <li>Batch بندی ۱۰۰ تا ۵۰۰ تایی</li>
+      <li>برای هر Batch:
+        <ul>
+          <li>ارسال price یا productDetails (در صورت نیاز)</li>
+          <li>ارسال stock</li>
+          <li>در صورت نیاز active/title</li>
+        </ul>
+      </li>
+      <li>ثبت نتیجه و جمع‌آوری failedItems</li>
+      <li>Retry فقط برای failedItems و فقط پس از اصلاح</li>
+    </ol>
+
+    <h3>نمونه Bulk ارسال موجودی (Batch 250)</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://api-proxy.snapp.express/va/v1/product/stock
+Authorization: Bearer &lt;access_token&gt;
+Content-Type: application/json
+
+{
+  "vendorCode": "VENDOR_CODE",
+  "stocks": [
+    { "barcode": "111", "stock": 10 },
+    { "barcode": "112", "stock": 0 }
+    // ... up to 250 items
+  ]
+}</code></pre>
+    </div>
+
+    <h3>نمونه Bulk ارسال قیمت (Batch 250)</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://api-proxy.snapp.express/va/v1/product/price
+Authorization: Bearer &lt;access_token&gt;
+Content-Type: application/json
+
+{
+  "vendorCode": "VENDOR_CODE",
+  "prices": [
+    { "barcode": "111", "price": 35000 },
+    { "barcode": "112", "price": 18000 }
+    // ... up to 250 items
+  ]
+}</code></pre>
+    </div>
+
+    <div class="callout">
+      <strong>نکته اجرایی:</strong>
+      اگر حجم SKU زیاد است، Full Resync را در زمان‌های کم‌ترافیک اجرا کنید
+      و همزمان Live Sync را قطع نکنید؛ فقط rate را کنترل کنید.
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۷.۸ کنترل صحت (Verification) بدون هزینه بالا</h2>
+
+    <p>
+      برای بررسی اینکه پلتفرم چه داده‌ای از یک SKU ثبت کرده است،
+      می‌توانید در سناریوهای دیباگ از endpoint استعلام استفاده کنید.
+      این مرحله باید <strong>محدود و هدفمند</strong> باشد (برای چند SKU مشکوک)، نه برای همه SKUها.
+    </p>
+
+    <h3>استعلام یک یا چند SKU (get-info)</h3>
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://api-proxy.snapp.express/va/v1/product/get-info
+Authorization: Bearer &lt;access_token&gt;
+Content-Type: application/json
+
+{
+  "vendorCode": "VENDOR_CODE",
+  "products": [
+    { "barcode": "1234" },
+    { "barcode": "5678" }
+  ]
+}</code></pre>
+    </div>
+
+    <div class="callout">
+      <strong>کاربرد:</strong>
+      وقتی یک SKU خاص “مشکوک” است یا اختلاف تکرارشونده دارد،
+      با get-info می‌توانید بفهمید مشکل از ارسال POS است یا از داده ورودی.
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۷.۹ Runbook عملیاتی (برای تیم‌های Operations و Vendor)</h2>
+
+    <h3>اگر NFC/Reject به دلیل OOS بالا رفت…</h3>
+    <ol>
+      <li>بررسی کنید Live Sync موجودی فعال است (Sync Lag)</li>
+      <li>failedItems را از آخرین batchها استخراج کنید</li>
+      <li>Partial Resync روی SKUهای پرتکرار انجام دهید</li>
+      <li>اگر مشکل ادامه داشت: Full Resync مرحله‌ای</li>
+      <li>در نهایت، فرآیند داخلی فروشگاه را بازبینی کنید (ورودی بار، ضایعات، فروش خارج از POS)</li>
+    </ol>
+
+    <h3>اگر قیمت‌ها drift دارند…</h3>
+    <ol>
+      <li>بررسی کنید قیمت در POS واقعاً به‌روزرسانی شده یا فقط در UI تغییر کرده</li>
+      <li>price/productDetails را برای SKUهای مشکوک resend کنید</li>
+      <li>اگر تکرار شد: logging دقیق (barcode, pos_price, sent_price, response)</li>
+    </ol>
+
+    <div class="callout danger">
+      <strong>اشتباه رایج:</strong>
+      «ارسال دوباره کل دیتاست» بدون تحلیل، معمولاً مشکل را حل نمی‌کند و فقط سیستم را سنگین می‌کند.
+      Resync باید هدفمند و مرحله‌ای باشد.
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۷.۱۰ KPIهای پیشنهادی برای داشبورد (Business + Tech)</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>KPI</th>
+          <th>تعریف</th>
+          <th>چرایی اهمیت</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Sync Lag (Stock/Price)</td>
+          <td>زمان از آخرین ارسال موفق</td>
+          <td>پیش‌بینی NFC/Drift قبل از رخداد</td>
+        </tr>
+        <tr>
+          <td>FailedItems Rate</td>
+          <td>failedItems / total_items</td>
+          <td>کیفیت داده و سلامت Sync</td>
+        </tr>
+        <tr>
+          <td>Retry Rate</td>
+          <td>retry_count / total_requests</td>
+          <td>نشانه مشکل شبکه یا endpoint</td>
+        </tr>
+        <tr>
+          <td>Resync Frequency</td>
+          <td>تعداد Partial/Full Resync در روز</td>
+          <td>اگر بالا باشد یعنی Live Sync پایدار نیست</td>
+        </tr>
+        <tr>
+          <td>NFC / OOS Reject Signals</td>
+          <td>سیگنال‌های عملیاتی از سمت سفارش‌ها</td>
+          <td>اثر مستقیم روی SLA و تجربه مشتری</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>هدف مدیریتی:</strong>
+      اگر Resync زیاد اجرا می‌شود، معمولاً مشکل “فرآیند” است نه “API”.
+      باید منبع Drift (ورودی بار، فروش خارج از POS، ضایعات، اصلاح دستی) شناسایی شود.
+    </div>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۷.۱۱ نمونه گزارش اجرای Resync (برای لاگ و Audit)</h2>
+
+    <div class="code-block dark">
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>{
+  "vendorCode": "VENDOR_CODE",
+  "syncType": "partial",
+  "trigger": "weak_signal: failed_items_spike",
+  "startedAt": "2025-12-16T08:30:00Z",
+  "batchSize": 250,
+  "itemsPlanned": 740,
+  "itemsSent": 740,
+  "failedItems": 12,
+  "retries": 1,
+  "durationSec": 48,
+  "result": "success_with_repair"
+}</code></pre>
+    </div>
+
+    <p class="text-muted">
+      پیشنهاد می‌شود این گزارش حداقل ۷ تا ۳۰ روز نگهداری شود تا برای تحلیل‌های عملیاتی و رفع ریشه‌ای Drift مفید باشد.
+    </p>
+  </section>
+
+  <!-- ===================================================== -->
+  <section class="panel">
+    <h2>۷.۱۲ نتیجه‌گیری</h2>
+    <p>
+      Weak Signal → Resync یک الگوی استاندارد برای کاهش ریسک در گروسری آنلاین است.
+      Live Sync، Partial Resync و Full Resync باید در کنار هم و با کنترل بار اجرا شوند.
+      اجرای درست این الگو باعث کاهش NFC، کاهش اختلاف‌ها و پایداری سیستم در مقیاس سازمانی می‌شود.
+    </p>
+
+    <a href="08-checklist.html" class="btn-primary">رفتن به بخش ۸: چک‌لیست نهایی</a>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <p>© تیم فنی اسنپ! مارکت — مستند POS Integration (v2.1.1)</p>
+</footer>
+
+<script>
+function copyCode(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  const text = pre ? pre.innerText : "";
+  navigator.clipboard.writeText(text);
+  btn.innerText = "Copied ✓";
+  setTimeout(() => btn.innerText = "Copy", 1400);
+}
+</script>
+
+</body>
+</html>

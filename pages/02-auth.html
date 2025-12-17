@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>بخش ۲ – احراز هویت (OAuth2) | راهنمای POS اسنپ! مارکت</title>
+  <link rel="stylesheet" href="../style.css" />
+</head>
+<body>
+
+<header class="header">
+  <div class="container">
+    <nav class="breadcrumb">
+      <a href="../index.html">خانه</a> / <span>بخش ۲: احراز هویت</span>
+    </nav>
+    <h1>۲. احراز هویت (OAuth2)</h1>
+  </div>
+</header>
+
+<main class="container">
+
+<!-- ===================== INTRO ===================== -->
+<section class="panel">
+  <h2>۲.۱ مقدمه</h2>
+  <p>
+    تمامی درخواست‌های API از سمت سیستم‌های <strong>POS</strong> به سامانه
+    <strong>اسنپ! مارکت</strong> باید دارای <strong>Access Token معتبر</strong> باشند.
+  </p>
+  <p>
+    احراز هویت از طریق سرویس متمرکز
+    <code>auth-proxy.snapp.express</code>
+    و بر اساس استاندارد <strong>OAuth2</strong> انجام می‌شود.
+  </p>
+
+  <div class="callout">
+    <strong>دید عملیاتی:</strong>
+    Token یکی از اجزای حیاتی پایداری فروشگاه است.
+    مدیریت نادرست آن مستقیماً منجر به Reject سفارش و بسته شدن فروشگاه می‌شود.
+  </div>
+</section>
+
+<!-- ===================== PASSWORD GRANT ===================== -->
+<section class="panel">
+  <h2>۲.۲ دریافت Access Token (Password Grant)</h2>
+  <p>
+    این روش معمولاً فقط در یکی از شرایط زیر استفاده می‌شود:
+  </p>
+  <ul>
+    <li>راه‌اندازی اولیه POS</li>
+    <li>منقضی شدن Refresh Token</li>
+    <li>خطای دسترسی غیرقابل بازیابی</li>
+  </ul>
+
+  <h3>Endpoint</h3>
+  <div class="code-block">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><code>POST https://auth-proxy.snapp.express/token
+Content-Type: application/x-www-form-urlencoded</code></pre>
+  </div>
+
+  <h3>Request Body</h3>
+  <div class="code-block">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>grant_type=password
+scope=automation
+client_id=YOUR_CLIENT_ID
+client_secret=YOUR_CLIENT_SECRET
+username=STORE_USERNAME
+password=STORE_PASSWORD</code></pre>
+  </div>
+
+  <h3>نمونه cURL</h3>
+  <div class="code-block dark">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>curl -X POST "https://auth-proxy.snapp.express/token" \
+ -H "Content-Type: application/x-www-form-urlencoded" \
+ -d "grant_type=password&scope=automation&client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&username=STORE_USERNAME&password=STORE_PASSWORD"</code></pre>
+  </div>
+
+  <h3>Response نمونه</h3>
+  <div class="code-block dark">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "Bearer",
+  "expires_in": 7200,
+  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}</code></pre>
+  </div>
+</section>
+
+<!-- ===================== REFRESH TOKEN ===================== -->
+<section class="panel">
+  <h2>۲.۳ نوسازی Access Token (Refresh Token Grant)</h2>
+  <p>
+    این روش <strong>مسیر اصلی و توصیه‌شده</strong> برای تمدید دسترسی است
+    و باید به‌صورت خودکار در POS پیاده‌سازی شود.
+  </p>
+
+  <h3>Endpoint</h3>
+  <div class="code-block">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>POST https://auth-proxy.snapp.express/token
+Content-Type: application/x-www-form-urlencoded</code></pre>
+  </div>
+
+  <h3>Request Body</h3>
+  <div class="code-block">
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code>grant_type=refresh_token
+scope=automation
+client_id=YOUR_CLIENT_ID
+client_secret=YOUR_CLIENT_SECRET
+refresh_token=YOUR_REFRESH_TOKEN</code></pre>
+  </div>
+
+  <div class="callout">
+    <strong>Best Practice:</strong>
+    نوسازی توکن را <strong>۵ دقیقه قبل از expires_in</strong> انجام دهید
+    و هرگز منتظر خطای 401 نمانید.
+  </div>
+</section>
+
+<!-- ===================== ERROR HANDLING ===================== -->
+<section class="panel">
+  <h2>۲.۴ خطاها و سناریوهای رایج</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>سناریو</th>
+        <th>کد خطا</th>
+        <th>اقدام پیشنهادی</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Access Token منقضی شده</td>
+        <td>401 / 3003</td>
+        <td>Refresh Token</td>
+      </tr>
+      <tr>
+        <td>Refresh Token نامعتبر</td>
+        <td>3004</td>
+        <td>Password Grant مجدد</td>
+      </tr>
+      <tr>
+        <td>Client Secret اشتباه</td>
+        <td>3002</td>
+        <td>بررسی تنظیمات محیطی</td>
+      </tr>
+      <tr>
+        <td>قطع دسترسی فروشگاه</td>
+        <td>503</td>
+        <td>تماس با تیم عملیات</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout danger">
+    <strong>هشدار:</strong>
+    Retry کورکورانه در Password Grant می‌تواند منجر به
+    <strong>Block امنیتی</strong> شود.
+  </div>
+</section>
+
+<!-- ===================== ARCHITECTURE ===================== -->
+<section class="panel">
+  <h2>۲.۵ پیشنهاد معماری برای POS</h2>
+  <ul>
+    <li>Token Manager مرکزی (Singleton)</li>
+    <li>Refresh خودکار قبل از انقضا</li>
+    <li>Fail-Safe: در صورت شکست Refresh → Login مجدد</li>
+    <li>Log دقیق خطاهای 3xxx</li>
+    <li>عدم ذخیره Token در Client/UI</li>
+  </ul>
+</section>
+
+<section class="panel">
+  <h2>۲.۶ ادامه مسیر</h2>
+  <p>
+    پس از احراز هویت موفق، POS می‌تواند وارد مرحله
+    همگام‌سازی محصولات، قیمت و موجودی شود.
+  </p>
+  <a href="03-product.html" class="btn-primary">
+    رفتن به بخش ۳: محصولات و موجودی
+  </a>
+</section>
+
+</main>
+
+<footer class="footer">
+  <p>© تیم فنی اسنپ! مارکت — مستند POS Integration (v2.1.1)</p>
+</footer>
+
+<script>
+function copyCode(btn) {
+  const code = btn.nextElementSibling.innerText;
+  navigator.clipboard.writeText(code);
+  btn.innerText = "Copied ✓";
+  setTimeout(() => btn.innerText = "Copy", 1500);
+}
+</script>
+
+</body>
+</html>
